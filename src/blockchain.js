@@ -68,6 +68,10 @@ class Blockchain {
             block.time = new Date().getTime().toString().slice(0,-3);
             if (self.height > -1) block.previousBlockHash = self.chain[self.chain.length - 1].hash;
             block.hash = SHA256(JSON.stringify(block)).toString();
+
+            const errorLog = self.validateChain();
+            if (errorLog.length > 0) reject(errorLog.reduce((prev, curr) => `${prev}\n${curr}`));
+
             self.chain.push(block);
             self.height++;
             resolve(block);
@@ -183,11 +187,15 @@ class Blockchain {
         return new Promise(async (resolve, reject) => {
             errorLog = self.chain.map(b => {
                 if (!b.validate())
-                    reject(`error: block ${b.address} has been tampered with`);
+                    return `error: block ${b.address} has been tampered with`;
                 
-                if (self.height > -1 && b.previousBlockHash != self.chain[b.height])
-                    reject('error: broken chain');
-            });
+                else if (b.height > 0 && b.previousBlockHash !== self.chain[b.height].hash)
+                    return 'error: broken chain';
+
+                else
+                    return '';
+            })
+            .filter(log => log !== '');
             resolve(errorLog);
         });
     }
