@@ -64,17 +64,21 @@ class Blockchain {
     _addBlock(block) {
         let self = this;
         return new Promise(async (resolve, reject) => {
-            block.height = self.chain.length;
-            block.time = new Date().getTime().toString().slice(0,-3);
-            if (self.height > -1) block.previousBlockHash = self.chain[self.chain.length - 1].hash;
-            block.hash = SHA256(JSON.stringify(block)).toString();
-
-            const errorLog = self.validateChain();
-            if (errorLog.length > 0) reject(errorLog.reduce((prev, curr) => `${prev}\n${curr}`));
-
-            self.chain.push(block);
-            self.height++;
-            resolve(block);
+            try {
+                block.height = self.chain.length;
+                block.time = new Date().getTime().toString().slice(0,-3);
+                if (self.height > -1) block.previousBlockHash = self.chain[self.chain.length - 1].hash;
+                block.hash = SHA256(JSON.stringify(block)).toString();
+    
+                const errorLog = await self.validateChain();
+                if (errorLog && errorLog.length > 0) reject(errorLog.reduce((prev, curr) => `${prev}\n${curr}`));
+    
+                self.chain.push(block);
+                self.height++;
+                resolve(block);
+            } catch (error) {
+                reject(error);
+            }
         });
     }
 
@@ -117,7 +121,7 @@ class Blockchain {
             let difference = currentTime - messageTime;
             if (difference < 300) {
                 if (bitcoinMessage.verify(message, address, signature)) {
-                    resolve(self._addBlock(new BlockClass.Block({ owner: address, star })));
+                    resolve(await self._addBlock(new BlockClass.Block({ owner: address, star })));
                 }
                 reject("Error: Invalid wallet");
             }
@@ -185,17 +189,16 @@ class Blockchain {
         let self = this;
         let errorLog = [];
         return new Promise(async (resolve, reject) => {
-            errorLog = self.chain.map(b => {
-                if (!b.validate())
-                    return `error: block ${b.address} has been tampered with`;
-                
-                else if (b.height > 0 && b.previousBlockHash !== self.chain[b.height].hash)
-                    return 'error: broken chain';
+            self.chain.forEach(async b => {
+                let isBlockValid = await b.validate();
 
-                else
-                    return '';
+                if (!isBlockValid)
+                    errorLog.push(`error: block at ${b.height} has been tampered with`);
+                
+                else if (b.height > 0 && b.previousBlockHash !== self.chain[b.height-1].hash)
+                    errorLog.push(`error: broken chain at ${b.height}`);
+
             })
-            .filter(log => log !== '');
             resolve(errorLog);
         });
     }
